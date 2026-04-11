@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice AI Task Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="data:,">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Voice Task Manager</h1>
+            <div class="stats-row">
+                <div class="stat-card">
+                    <span class="label">Total</span>
+                    <span id="stat-total" class="value">0</span>
+                </div>
+                <div class="stat-card">
+                    <span class="label">Done</span>
+                    <span id="stat-done" class="value">0</span>
+                </div>
+                <div class="stat-card">
+                    <span class="label">Pending</span>
+                    <span id="stat-pending" class="value">0</span>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <div class="voice-section">
+                <div class="mic-container">
+                    <button id="mic-btn" class="pulse-ring">
+                        <span class="icon">🎤</span>
+                    </button>
+                    <p id="mic-hint">Tap to speak</p>
+                </div>
+                
+                <div class="feedback-container">
+                    <div id="transcript-box" class="glass-box transcript">
+                        <span class="placeholder">Your command will appear here...</span>
+                    </div>
+                    <div id="ai-response-box" class="glass-box response">
+                        <span class="placeholder">AI Status: Ready</span>
+                    </div>
+                </div>
+            </div>
+
+            <nav class="filter-bar">
+                <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="work">Work</button>
+                <button class="filter-btn" data-filter="urgent">Urgent</button>
+                <button class="filter-btn" data-filter="pending">Pending</button>
+            </nav>
+
+            <div id="task-list" class="task-list">
+                <!-- Tasks will be rendered here -->
+                <div class="empty-state">
+                    No tasks found. Try saying "Add finish report to work".
+                </div>
+            </div>
+        </main>
+
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
