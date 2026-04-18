@@ -30,7 +30,7 @@ function render() {
 
     // Use View Transitions API if available
     if (document.startViewTransition) {
-        document.startViewTransition(() => updateDOM(filteredTasks));
+        document.startViewTransition(() => updateDOM(filteredTasks)).ready.catch(() => {});
     } else {
         updateDOM(filteredTasks);
     }
@@ -337,10 +337,10 @@ function applyActions(parsed, originalText) {
     };
     tasks.unshift(newTask);
 
-    // Set alarm if time was provided
-    if (t.alarm) {
-      const alarmTime = setAlarm(newTask.id, newTask.title, t.alarm);
-      showMessage(`Task added with alarm set for ${alarmTime}`);
+    // Set alarm if time was provided and is valid
+    if (t.alarm && t.alarm !== 'none') {
+      const alarmLabel = setAlarm(newTask.id, newTask.title, t.alarm);
+      if (alarmLabel) showMessage(`Task added with alarm set for ${alarmLabel}`);
     }
   });
 
@@ -386,10 +386,15 @@ requestNotificationPermission();
 let activeAlarms = {};
 
 function setAlarm(taskId, taskTitle, alarmTime) {
-  if (!alarmTime) return;
+  if (!alarmTime || alarmTime === 'none') return null;
 
-  // Parse alarm time — expects "HH:MM" format
-  const [hours, minutes] = alarmTime.split(':').map(Number);
+  // Split and validate time format
+  const parts = alarmTime.split(':');
+  if (parts.length !== 2) return null;
+
+  const [hours, minutes] = parts.map(Number);
+  if (isNaN(hours) || isNaN(minutes)) return null;
+
   const now = new Date();
   const alarmDate = new Date();
   alarmDate.setHours(hours, minutes, 0, 0);
@@ -662,13 +667,23 @@ function updateDashboard() {
     }
 }
 
-// --- Smart AI suggestion card ---
+// --- Smart AI suggestion card (with Rate Limit Protection) ---
+let isFetchingSuggestion = false;
+let lastSuggestionTime = 0;
+
 async function getAISuggestion() {
+  const now = Date.now();
+  // Prevent spamming (wait at least 10s between suggestions and don't overlap)
+  if (isFetchingSuggestion || (now - lastSuggestionTime < 10000)) return;
+
   if (tasks.filter(t => !t.done).length < 2) {
     const existingCard = document.getElementById('ai-suggestion');
     if (existingCard) existingCard.remove();
     return;
   }
+
+  isFetchingSuggestion = true;
+  lastSuggestionTime = now;
 
   const pending = tasks
     .filter(t => !t.done)
@@ -711,6 +726,8 @@ async function getAISuggestion() {
     card.textContent = suggestion;
   } catch (err) {
     console.error('getAISuggestion error:', err.message);
+  } finally {
+    isFetchingSuggestion = false;
   }
 }
 
