@@ -9,38 +9,59 @@ app.use(express.static('public'));
 
 
 app.post('/api/chat', async (req, res) => {
-  console.log('Received body for Groq:', JSON.stringify(req.body));
-  
-  try {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        max_tokens: 1000,
-        messages: [
-          { role: 'system', content: req.body.system },
-          { role: 'user',   content: req.body.messages[0].content }
-        ]
-      })
-    });
+  const maxRetries = 3;
+  let attempt = 0;
 
-    const text = await response.text();
-    console.log('Groq raw response:', text);
-
+  while (attempt < maxRetries) {
     try {
-      const data = JSON.parse(text);
-      res.json(data);
-    } catch {
-      res.status(500).json({ error: { message: 'Groq returned non-JSON' }, raw: text });
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          max_tokens: 1000,
+          messages: [
+            { role: 'system', content: req.body.system },
+            ...req.body.messages
+          ]
+        })
+      });
+
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error('Groq returned non-JSON: ' + text);
+      }
+
+      // If rate limited, wait and retry
+      if (data.error?.message?.includes('Rate limit') || response.status === 429) {
+        attempt++;
+        const waitMs = attempt * 2000; // wait 2s, 4s, 6s
+        console.log(`Rate limited. Retrying in ${waitMs}ms... (attempt ${attempt})`);
+        await new Promise(r => setTimeout(r, waitMs));
+        continue;
+      }
+
+      return res.json(data);
+
+    } catch (err) {
+      attempt++;
+      console.error(`Attempt ${attempt} failed:`, err.message);
+      if (attempt >= maxRetries) {
+        return res.status(500).json({ error: { message: err.message } });
+      }
+      await new Promise(r => setTimeout(r, 1000)); // Small wait before retry on network error
     }
-  } catch (err) {
-    console.error('Proxy error:', err.message);
-    res.status(500).json({ error: { message: err.message } });
   }
+
+  res.status(429).json({ 
+    error: { message: 'Rate limit reached. Please wait 2 minutes and try again.' }
+  });
 });
 
 const PORT = 3002;
