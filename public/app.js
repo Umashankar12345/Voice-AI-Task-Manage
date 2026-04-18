@@ -1,5 +1,5 @@
 // --- State Management (Step 2 & 9) ---
-let tasks = JSON.parse(localStorage.getItem('ai_tasks')) || [
+let tasks = JSON.parse(localStorage.getItem('voiceTasks')) || [
     { id: 1, title: 'Build the futuristic UI', tags: ['project'], due: 'Today', done: true },
     { id: 2, title: 'Connect Claude Sonnet', tags: ['ai', 'coding'], due: 'Tomorrow', done: false }
 ];
@@ -9,6 +9,8 @@ let currentFilter = 'all';
 // Global memory — stores full conversation
 let conversationHistory = JSON.parse(localStorage.getItem('ai_history')) || [];
 let taskMemory = JSON.parse(localStorage.getItem('ai_task_memory')) || []; // remembers everything spoken
+
+let prodChart = null; // Chart.js instance
 
 // --- DOM Elements ---
 const taskListEl = document.getElementById('task-list');
@@ -34,9 +36,13 @@ function render() {
     }
 
     // Persist
-    localStorage.setItem('ai_tasks', JSON.stringify(tasks));
+    saveToStorage();
     localStorage.setItem('ai_history', JSON.stringify(conversationHistory));
     localStorage.setItem('ai_task_memory', JSON.stringify(taskMemory));
+}
+
+function saveToStorage() {
+  localStorage.setItem('voiceTasks', JSON.stringify(tasks));
 }
 
 function updateDOM(filteredTasks) {
@@ -85,13 +91,23 @@ function toggleTask(id) {
     const t = tasks.find(x => x.id === id);
     if (t) {
         t.done = !t.done;
+        if (t.done) {
+            t.completedAt = new Date().toISOString();
+        } else {
+            delete t.completedAt;
+        }
         render();
+        saveToStorage();
+        if (!document.getElementById('dashboard-overlay').classList.contains('hidden')) {
+            updateDashboard();
+        }
     }
 }
 
 function deleteTask(id) {
     tasks = tasks.filter(x => x.id !== id);
     render();
+    saveToStorage();
 }
 
 function addTask(title, tags = [], due = 'Today') {
@@ -349,6 +365,8 @@ function applyActions(parsed, originalText) {
   });
 
   render();
+  saveToStorage();
+  getAISuggestion();
   if (parsed.message) showMessage(parsed.message);
 }
 
@@ -533,10 +551,176 @@ function cancelAlarm(taskId) {
   render();
 }
 
+// --- Dashboard Logic ---
+function toggleDashboard() {
+    const overlay = document.getElementById('dashboard-overlay');
+    const isHidden = overlay.classList.toggle('hidden');
+    if (!isHidden) {
+        updateDashboard();
+    }
+}
+
+function initDashboard() {
+    const ctx = document.getElementById('productivityChart').getContext('2d');
+    
+    // Create gradient
+    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+    gradient.addColorStop(0, 'rgba(99, 102, 241, 0.5)');
+    gradient.addColorStop(1, 'rgba(168, 85, 247, 0)');
+
+    prodChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Tasks Completed',
+                data: [],
+                borderColor: '#6366f1',
+                backgroundColor: gradient,
+                fill: true,
+                tension: 0.4,
+                borderWidth: 3,
+                pointBackgroundColor: '#a855f7',
+                pointRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: { color: '#94a3b8', stepSize: 1 }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#94a3b8' }
+                }
+            }
+        }
+    });
+}
+
+function updateDashboard() {
+    if (!prodChart) initDashboard();
+
+    const now = new Date();
+    const last7Days = [...Array(7)].map((_, i) => {
+        const d = new Date();
+        d.setDate(now.getDate() - i);
+        return d.toISOString().split('T')[0];
+    }).reverse();
+
+    const stats = last7Days.map(date => {
+        return tasks.filter(t => t.done && t.completedAt && t.completedAt.startsWith(date)).length;
+    });
+
+    prodChart.data.labels = last7Days.map(d => {
+        const date = new Date(d);
+        return date.toLocaleDateString([], { weekday: 'short' });
+    });
+    prodChart.data.datasets[0].data = stats;
+    prodChart.update();
+
+    // Stats Calculation
+    const completedTasks = tasks.filter(t => t.done && t.completedAt);
+    
+    // 1. Completion Rate
+    const rate = tasks.length > 0 ? Math.round((tasks.filter(t => t.done).length / tasks.length) * 100) : 0;
+    document.getElementById('dash-rate').textContent = `${rate}%`;
+
+    // 2. Streak
+    let streak = 0;
+    let checkDate = new Date();
+    while (true) {
+        const dateStr = checkDate.toISOString().split('T')[0];
+        const hasTask = tasks.some(t => t.done && t.completedAt && t.completedAt.startsWith(dateStr));
+        if (hasTask) {
+            streak++;
+            checkDate.setDate(checkDate.getDate() - 1);
+        } else {
+            break;
+        }
+    }
+    document.getElementById('dash-streak').textContent = `${streak} days`;
+
+    // 3. Peak Hour
+    const hours = completedTasks.map(t => new Date(t.completedAt).getHours());
+    if (hours.length > 0) {
+        const peakHour = hours.reduce((a, b, i, arr) => 
+            (arr.filter(v => v === a).length >= arr.filter(v => v === b).length ? a : b)
+        );
+        const ampm = peakHour >= 12 ? 'PM' : 'AM';
+        const displayHour = peakHour % 12 || 12;
+        document.getElementById('dash-peak').textContent = `${displayHour} ${ampm}`;
+    } else {
+        document.getElementById('dash-peak').textContent = '--';
+    }
+}
+
+// --- Smart AI suggestion card ---
+async function getAISuggestion() {
+  if (tasks.filter(t => !t.done).length < 2) {
+    const existingCard = document.getElementById('ai-suggestion');
+    if (existingCard) existingCard.remove();
+    return;
+  }
+
+  const pending = tasks
+    .filter(t => !t.done)
+    .map(t => `[${t.id}] ${t.title} tags:${t.tags.join(',')} due:${t.due}`)
+    .join('\n');
+
+  try {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system: 'You are a productivity AI. Look at the pending tasks and suggest ONE task to do first. Reply in one short sentence starting with "✦ Start with:"',
+        messages: [{ role: 'user', content: pending }]
+      })
+    });
+
+    const data = await response.json();
+    if (data.error) return;
+    const suggestion = data.choices[0].message.content;
+
+    // Show suggestion card
+    let card = document.getElementById('ai-suggestion');
+    if (!card) {
+      card = document.createElement('div');
+      card.id = 'ai-suggestion';
+      card.style.cssText = `
+        background: rgba(127,119,221,0.1);
+        border: 1px solid rgba(127,119,221,0.2);
+        border-radius: 12px;
+        padding: 12px 16px;
+        margin-bottom: 20px;
+        font-size: 13px;
+        color: #AFA9EC;
+        font-style: italic;
+        backdrop-filter: blur(10px);
+        animation: fadeIn 0.5s ease;
+      `;
+      document.getElementById('task-list').before(card);
+    }
+    card.textContent = suggestion;
+  } catch (err) {
+    console.error('getAISuggestion error:', err.message);
+  }
+}
+
 // Initial Render & Restoration
 function init() {
   updateActiveFilterUI();
   render();
+  getAISuggestion();
+  initDashboard();
+  updateDashboard();
   
   // Restore alarms for any tasks that have them
   tasks.forEach(t => {
@@ -549,3 +733,4 @@ function init() {
 }
 
 init();
+

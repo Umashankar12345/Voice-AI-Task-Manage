@@ -9,11 +9,17 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <link rel="icon" href="data:,">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <div class="app-container">
         <header>
-            <h1>Voice Task Manager</h1>
+            <div class="header-main">
+                <h1>Voice Task Manager</h1>
+                <button id="dashboard-toggle" onclick="toggleDashboard()" title="View Productivity Analytics">
+                    <span class="icon">📊</span>
+                </button>
+            </div>
             <div class="stats-row">
                 <div class="stat-card">
                     <span class="label">Total</span>
@@ -68,6 +74,35 @@
                 </div>
             </div>
         </main>
+
+        <!-- Productivity Dashboard -->
+        <div id="dashboard-overlay" class="dashboard-overlay hidden">
+            <div class="dashboard-content glass-box">
+                <div class="dashboard-header">
+                    <h2>Productivity Analytics</h2>
+                    <button class="close-btn" onclick="toggleDashboard()">✕</button>
+                </div>
+                
+                <div class="chart-container">
+                    <canvas id="productivityChart"></canvas>
+                </div>
+
+                <div class="dashboard-stats">
+                    <div class="stat-badge">
+                        <span class="label">🔥 Streak</span>
+                        <span id="dash-streak" class="value">0 days</span>
+                    </div>
+                    <div class="stat-badge">
+                        <span class="label">🎯 Rate</span>
+                        <span id="dash-rate" class="value">0%</span>
+                    </div>
+                    <div class="stat-badge">
+                        <span class="label">⚡ Peak Hour</span>
+                        <span id="dash-peak" class="value">--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
 
     </div>
 
