@@ -133,6 +133,45 @@ if (SpeechRecognition) {
     micBtn.title = "Speech recognition not supported in this browser.";
 }
 
+// --- AI Daily Summary (Step 12) ---
+async function speakDailySummary() {
+  const taskList = tasks.map(t =>
+    `${t.title}, tagged as ${t.tags.join(' and ')}, due ${t.due}, ${t.done ? 'completed' : 'pending'}`
+  ).join('. ');
+
+  aiResponseBox.innerHTML = '<span class="placeholder">AI is preparing your summary...</span>';
+
+  try {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system: 'You are a productivity assistant. Summarize the tasks in 2-3 spoken sentences. Be motivating and concise. Mention urgent ones first. Use a friendly, natural tone.',
+        messages: [{ role: 'user', content: `My tasks: ${taskList}` }]
+      })
+    });
+
+    const data = await response.json();
+    if (data.error) {
+       aiResponseBox.textContent = 'Error: ' + data.error.message;
+       return;
+    }
+
+    const summary = data.choices[0].message.content;
+
+    // Speak it out loud
+    const utterance = new SpeechSynthesisUtterance(summary);
+    utterance.rate = 0.95;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    window.speechSynthesis.speak(utterance);
+
+    aiResponseBox.textContent = summary;
+  } catch (err) {
+    aiResponseBox.textContent = 'Connection error: ' + err.message;
+  }
+}
+
 // --- AI Orchestration (Step 6, 7 & 8) ---
 
 function showMessage(msg) {
@@ -152,13 +191,13 @@ function buildPrompt() {
 
   return `You are a smart voice task manager with memory.
 You remember everything the user has said previously.
-
+ 
 RECENT COMMANDS HISTORY:
 ${recentMemory}
-
+ 
 CURRENT TASKS:
 ${taskList}
-
+ 
 RULES:
 - Understand casual and natural speech
 - "remind me at 3pm", "alarm for 9am", "wake me at 7" → extract alarm time
@@ -169,7 +208,7 @@ RULES:
 - If user references something from earlier conversation, use that context
 - Always extract alarm time if mentioned anywhere in the command
 - Guess tags: work / personal / health / urgent
-
+ 
 RESPOND ONLY WITH THIS EXACT JSON (no markdown):
 {
   "action": "add" | "complete" | "delete" | "query" | "none",
@@ -204,7 +243,7 @@ async function processCommand(text) {
   });
 
   try {
-    const response = await fetch('http://localhost:3002/api/chat', {
+    const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -510,5 +549,3 @@ function init() {
 }
 
 init();
-
-
