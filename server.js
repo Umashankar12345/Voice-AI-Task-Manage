@@ -64,8 +64,12 @@ app.post('/api/chat', async (req, res) => {
   });
 });
 
-const PORT = 3002;
-app.listen(PORT, () => {
-  console.log(`Proxy running on http://localhost:${PORT} (GROQ Mode)`);
-  console.log(`Groq API key present: ${!!process.env.GROQ_API_KEY}`);
-});
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = 3002;
+  app.listen(PORT, () => {
+    console.log(`Proxy running on http://localhost:${PORT} (GROQ Mode)`);
+    console.log(`Groq API key present: ${!!process.env.GROQ_API_KEY}`);
+  });
+}
+
+module.exports = app;
